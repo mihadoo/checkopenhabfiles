@@ -103,7 +103,3 @@ Or integrate it into a CI pipeline that watches your openHAB configuration repos
 - Only `.things`, `.items`, `.rules`, and `.sitemap` files are scanned (top-level directory, non-recursive)
 - DSL rules (`.rules`) are supported; newer Blockly or JavaScript rule files are not checked
 - Thing UIDs inside Bridge blocks are assumed to follow the standard `binding:thingType:bridgeId:thingId` pattern
-
-## License
-
-MIT
