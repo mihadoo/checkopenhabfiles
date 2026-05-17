@@ -190,7 +190,7 @@ def validate_item_thing_links(folder, valid_things, errors):
 # Validate item/thing references in .rules files.
 # ---------------------------------------------------------------------------
 def validate_rule_item_links(folder, valid_things, valid_items, errors):
-    METHOD_PATTERN  = re.compile(r'\b([a-zA-Z0-9_]+)\.(?:sendCommand|postUpdate)\b')
+    METHOD_PATTERN  = re.compile(r'\b([a-zA-Z0-9_]+)\.(?:state|sendCommand|postUpdate)\b')
     ACTION_PATTERN  = re.compile(r'(?<!\.)(?:sendCommand|postUpdate)\s*\(\s*["\']([a-zA-Z0-9_]+)["\']')
     THING_PATTERN   = re.compile(r'\bgetThingStatusInfo\s*\(\s*["\']([a-zA-Z0-9_]+)["\']')
 
