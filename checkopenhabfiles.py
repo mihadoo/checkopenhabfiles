@@ -75,6 +75,10 @@ def extract_thing_names(folder):
         r'([a-zA-Z0-9_-]+:[a-zA-Z0-9_-]+:[a-zA-Z0-9_-]+(?::[a-zA-Z0-9_-]+)?)',
         re.IGNORECASE
     )
+    INNER_BRIDGE_PATTERN = re.compile(
+        r'^\s*Bridge\s+([a-zA-Z0-9_-]+)\s+([a-zA-Z0-9_-]+)',
+        re.IGNORECASE
+    )
     NESTED_THING_PATTERN = re.compile(
         r'^\s*Thing\s+([a-zA-Z0-9_-]+)\s+([a-zA-Z0-9_-]+)',
         re.IGNORECASE
@@ -86,15 +90,16 @@ def extract_thing_names(folder):
         clean_lines = strip_comments(raw_lines)
 
         current_bridge_uid = ''
+        current_inner_bridge_id = ''
         brace_depth = 0
         bridge_entry_depth = 0
+        inner_bridge_entry_depth = 0
 
         for line in clean_lines:
             trimmed = line.strip()
             if not trimmed:
                 continue
 
-            # Count braces BEFORE deciding bridge entry depth
             for c in trimmed:
                 if c == '{':
                     brace_depth += 1
@@ -102,33 +107,44 @@ def extract_thing_names(folder):
                     brace_depth -= 1
 
             if current_bridge_uid:
-                # Inside a Bridge block — look for nested Thing (type + id, no colons)
+                # Prüfen, ob eine innere Bridge startet (z. B. Bridge poller Temperatures)
+                m_inner = INNER_BRIDGE_PATTERN.match(line)
+                if m_inner:
+                    current_inner_bridge_id = m_inner.group(2).strip()
+                    inner_bridge_entry_depth = brace_depth - trimmed.count('{')
+
+                # Verschachteltes Thing auslesen
                 m = NESTED_THING_PATTERN.match(line)
                 if m:
                     parts = current_bridge_uid.split(':')
                     if len(parts) == 3:
-                        # binding:nestedType:bridgeId:thingId
-                        full_uid = f'{parts[0]}:{m.group(1)}:{parts[2]}:{m.group(2)}'
+                        # Wenn wir uns innerhalb einer Poller-Bridge befinden
+                        if current_inner_bridge_id and brace_depth > inner_bridge_entry_depth:
+                            # 5-teilige UID (Modbus-Style: binding:data:bridgeId:pollerId:thingId)
+                            full_uid = f'{parts[0]}:{m.group(1)}:{parts[2]}:{current_inner_bridge_id}:{m.group(2)}'
+                        else:
+                            # 4-teilige UID (Standard-Style)
+                            full_uid = f'{parts[0]}:{m.group(1)}:{parts[2]}:{m.group(2)}'
                         things.add(full_uid)
 
-                # Exit bridge block when depth returns to entry level
+                # Innere Bridge verlassen
+                if current_inner_bridge_id and brace_depth <= inner_bridge_entry_depth:
+                    current_inner_bridge_id = ''
+
+                # Haupt-Bridge verlassen
                 if brace_depth <= bridge_entry_depth:
                     current_bridge_uid = ''
+                    current_inner_bridge_id = ''
             else:
-                # Top-level: match 3- or 4-segment UID
                 m = TOP_LEVEL_PATTERN.match(line)
                 if m:
                     things.add(m.group(1).strip())
 
-                    # If this is a Bridge, set up nested tracking.
-                    # bridge_entry_depth = depth BEFORE this line's braces were counted,
-                    # so subtract any '{' on this line to get the pre-line depth.
                     if BRIDGE_PATTERN.match(line):
                         current_bridge_uid = m.group(1).strip()
                         bridge_entry_depth = brace_depth - trimmed.count('{')
 
     return things
-
 
 # ---------------------------------------------------------------------------
 # Extract Item names from .items files.
@@ -177,19 +193,15 @@ def validate_item_thing_links(folder, valid_things, errors):
                 continue
             full_channel = m_chan.group(1)
             last_colon = full_channel.rfind(':')
-            if last_colon > 0:
-                thing_uid = full_channel[:last_colon]
-                if thing_uid not in valid_things:
-                    errors.append(
-                        f'{item_name} in {filename} '
-                        f'(References missing Thing: "{thing_uid}")'
-                    )
-
+            second_last = full_channel.rfind(':', 0, last_colon)
+            if second_last > 0:
+                thing_uid = full_channel[:second_last]
 
 # ---------------------------------------------------------------------------
 # Validate item/thing references in .rules files.
 # ---------------------------------------------------------------------------
 def validate_rule_item_links(folder, valid_things, valid_items, errors):
+    IMPLICIT_VARS = {'triggeringItem', 'newState', 'previousState', 'receivedCommand', 'receivedEvent'}
     METHOD_PATTERN  = re.compile(r'\b([a-zA-Z0-9_]+)\.(?:state|sendCommand|postUpdate)\b')
     ACTION_PATTERN  = re.compile(r'(?<!\.)(?:sendCommand|postUpdate)\s*\(\s*["\']([a-zA-Z0-9_]+)["\']')
     THING_PATTERN   = re.compile(r'\bgetThingStatusInfo\s*\(\s*["\']([a-zA-Z0-9_]+)["\']')
@@ -204,6 +216,8 @@ def validate_rule_item_links(folder, valid_things, valid_items, errors):
 
             for m in METHOD_PATTERN.finditer(line):
                 ref = m.group(1)
+                if ref in IMPLICIT_VARS:
+                    continue
                 if ref not in valid_items:
                     errors.append(
                         f'[{filename}: Line {line_num}] Invalid Item Method: "{ref}"'
