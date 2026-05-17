@@ -137,7 +137,7 @@ def extract_item_names(folder):
     items = set()
     ITEM_PATTERN = re.compile(
         r'^\s*(?:Group|Switch|Rollershutter|String|Number|Dimmer|Contact|'
-        r'DateTime|Color|Player|Location|Image)\s+([a-zA-Z0-9_]+)',
+        r'DateTime|Color|Player|Location|Image)(?::[a-zA-Z0-9_]+)?\s+([a-zA-Z0-9_]+)',
         re.IGNORECASE
     )
     for filepath in get_files(folder, '.items'):
@@ -156,7 +156,7 @@ def extract_item_names(folder):
 def validate_item_thing_links(folder, valid_things, errors):
     ITEM_NAME_PATTERN = re.compile(
         r'^\s*(?:Group|Switch|Rollershutter|String|Number|Dimmer|Contact|'
-        r'DateTime|Color|Player|Location|Image)\s+([a-zA-Z0-9_]+)',
+        r'DateTime|Color|Player|Location|Image)(?::[a-zA-Z0-9_]+)?\s+([a-zA-Z0-9_]+)',
         re.IGNORECASE
     )
     CHANNEL_PATTERN = re.compile(
